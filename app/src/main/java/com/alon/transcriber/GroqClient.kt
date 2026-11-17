@@ -29,6 +29,9 @@ object GroqClient {
 
     /** Copies the shared content to a cache file with an extension Groq accepts. */
     private fun copyToCache(context: Context, uri: Uri): File {
+        // Only accept content:// (what WhatsApp and other apps share). A file:// URI could
+        // point at this app's own private files, e.g. the prefs holding the API key.
+        if (uri.scheme != "content") throw TranscribeException("סוג הקובץ ששותף לא נתמך")
         val cr = context.contentResolver
         val mime = cr.getType(uri)?.lowercase() ?: ""
         var displayName = ""
@@ -50,7 +53,21 @@ object GroqClient {
         }
         val out = File(context.cacheDir, "shared_audio.$ext")
         cr.openInputStream(uri)?.use { input ->
-            out.outputStream().use { input.copyTo(it) }
+            out.outputStream().use { output ->
+                // Copy with a size cap so a huge shared file can't fill the device storage
+                val buf = ByteArray(64 * 1024)
+                var total = 0L
+                while (true) {
+                    val n = input.read(buf)
+                    if (n < 0) break
+                    total += n
+                    if (total > MAX_BYTES) {
+                        output.close(); out.delete()
+                        throw TranscribeException("הקובץ גדול מדי (מעל 25MB)")
+                    }
+                    output.write(buf, 0, n)
+                }
+            }
         } ?: throw TranscribeException("לא הצלחתי לקרוא את הקובץ ששותף")
         return out
     }
