@@ -12,7 +12,7 @@ import kotlinx.coroutines.launch
 
 sealed interface ItemState {
     data object Loading : ItemState
-    data class Done(val text: String) : ItemState
+    data class Done(val result: Transcript) : ItemState
     data class Failed(val message: String) : ItemState
 }
 

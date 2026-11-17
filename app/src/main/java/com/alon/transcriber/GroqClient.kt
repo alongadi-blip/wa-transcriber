@@ -16,6 +16,8 @@ import java.util.concurrent.TimeUnit
 
 class TranscribeException(message: String) : Exception(message)
 
+data class Transcript(val text: String, val durationSec: Double?, val language: String?)
+
 object GroqClient {
     private const val URL = "https://api.groq.com/openai/v1/audio/transcriptions"
     private const val MODEL = "whisper-large-v3"
@@ -72,7 +74,7 @@ object GroqClient {
         return out
     }
 
-    suspend fun transcribe(context: Context, uri: Uri, apiKey: String, language: String?): String =
+    suspend fun transcribe(context: Context, uri: Uri, apiKey: String, language: String?): Transcript =
         withContext(Dispatchers.IO) {
             val file = copyToCache(context, uri)
             try {
@@ -89,7 +91,7 @@ object GroqClient {
                 val body = MultipartBody.Builder().setType(MultipartBody.FORM)
                     .addFormDataPart("file", file.name, file.asRequestBody(mediaType))
                     .addFormDataPart("model", MODEL)
-                    .addFormDataPart("response_format", "json")
+                    .addFormDataPart("response_format", "verbose_json") // adds duration + language
                     .addFormDataPart("temperature", "0")
                     .apply { if (!language.isNullOrBlank()) addFormDataPart("language", language) }
                     .build()
@@ -113,8 +115,14 @@ object GroqClient {
                             }
                         )
                     }
-                    JSONObject(text).optString("text").trim()
+                    val json = JSONObject(text)
+                    val body = json.optString("text").trim()
                         .ifEmpty { throw TranscribeException("לא זוהה דיבור בהודעה") }
+                    Transcript(
+                        text = body,
+                        durationSec = json.optDouble("duration").takeIf { !it.isNaN() && it > 0 },
+                        language = json.optString("language").takeIf { it.isNotBlank() }
+                    )
                 }
             } catch (e: TranscribeException) {
                 throw e
