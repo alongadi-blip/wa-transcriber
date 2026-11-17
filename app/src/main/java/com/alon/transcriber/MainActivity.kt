@@ -420,8 +420,9 @@ fun ResultsList(vm: MainViewModel, snackbar: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     val single = vm.items.size == 1
 
+    Column(Modifier.fillMaxSize()) {
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.weight(1f).fillMaxWidth(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = if (single) Arrangement.Center else Arrangement.spacedBy(28.dp)
     ) {
@@ -535,6 +536,66 @@ fun ResultsList(vm: MainViewModel, snackbar: SnackbarHostState) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (!single) AllMessagesBar(vm, snackbar)
+    }
+}
+
+/** Bottom bar shown when several voice notes were shared: copy/share all of them as one text. */
+@Composable
+fun AllMessagesBar(vm: MainViewModel, snackbar: SnackbarHostState) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val texts = vm.items.mapNotNull { (it.state as? ItemState.Done)?.result?.text }
+    val pending = vm.items.count { it.state is ItemState.Loading }
+    val all = texts.joinToString("\n\n")
+
+    Surface(color = MaterialTheme.colorScheme.surface, shadowElevation = 12.dp) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                if (pending > 0) "מתמלל עוד $pending מתוך ${vm.items.size}…"
+                else "${texts.size} הודעות מתומללות",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        clipboard.setText(AnnotatedString(all))
+                        scope.launch { snackbar.showSnackbar("${texts.size} ההודעות הועתקו") }
+                    },
+                    enabled = pending == 0 && texts.isNotEmpty(),
+                    shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) {
+                    Icon(Icons.Outlined.CopyAll, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("העתקת הכול", fontSize = 17.sp, fontWeight = FontWeight.Medium)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, all)
+                        }
+                        context.startActivity(Intent.createChooser(send, "שיתוף כל התמלולים"))
+                    },
+                    enabled = pending == 0 && texts.isNotEmpty(),
+                    shape = RoundedCornerShape(18.dp),
+                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.weight(1f).height(56.dp)
+                ) {
+                    Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("שיתוף הכול", fontSize = 17.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
