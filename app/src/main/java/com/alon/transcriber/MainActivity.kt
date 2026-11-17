@@ -18,6 +18,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -419,10 +420,16 @@ fun ResultsList(vm: MainViewModel, snackbar: SnackbarHostState) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val single = vm.items.size == 1
+    val listState = rememberLazyListState()
+    // Newly shared notes are appended at the end — bring them into view
+    LaunchedEffect(vm.items.size) {
+        if (vm.items.isNotEmpty()) listState.animateScrollToItem(vm.items.lastIndex)
+    }
 
     Column(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.weight(1f).fillMaxWidth(),
+        state = listState,
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = if (single) Arrangement.Center else Arrangement.spacedBy(28.dp)
     ) {
@@ -562,7 +569,7 @@ fun AllMessagesBar(vm: MainViewModel, snackbar: SnackbarHostState) {
         ) {
             Text(
                 if (pending > 0) "מתמלל עוד $pending מתוך ${vm.items.size}…"
-                else "${texts.size} הודעות מתומללות",
+                else "${texts.size} הודעות · אפשר לשתף עוד מוואטסאפ והן יתווספו",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

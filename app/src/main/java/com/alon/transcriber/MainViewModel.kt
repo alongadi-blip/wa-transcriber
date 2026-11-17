@@ -25,7 +25,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun submit(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        items.clear()
+        // Append rather than replace: WhatsApp can only share one voice note at a time,
+        // so the user collects several by sharing them one after another.
         uris.forEach { uri ->
             val item = Item(nextId++, uri, ItemState.Loading)
             items.add(item)
