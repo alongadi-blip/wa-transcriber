@@ -140,7 +140,9 @@ fun AppScreen(vm: MainViewModel) {
             )
         }
     ) { pad ->
-        Box(Modifier.padding(pad).fillMaxSize()) {
+        Column(Modifier.padding(pad).fillMaxSize()) {
+            if (vm.update != null && !showSettings) UpdateBanner(vm)
+            Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 showSettings -> SettingsScreen(vm.prefs) { saved ->
                     apiKey = saved
@@ -150,6 +152,53 @@ fun AppScreen(vm: MainViewModel) {
                 }
                 vm.items.isEmpty() -> IdleScreen()
                 else -> ResultsList(vm, snackbar)
+            }
+            }
+        }
+    }
+}
+
+@Composable
+fun UpdateBanner(vm: MainViewModel) {
+    val context = LocalContext.current
+    var needsPermission by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Outlined.SystemUpdate, contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "גרסה חדשה זמינה",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f)
+                )
+                if (vm.updating) {
+                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+                } else {
+                    Button(onClick = {
+                        needsPermission = !vm.installUpdate()
+                        if (needsPermission) Updater.openInstallPermissionSettings(context)
+                    }) { Text("עדכון") }
+                }
+            }
+            val note = vm.updateError
+                ?: if (needsPermission) "בפעם הראשונה בלבד: הפעל \"אפשר ממקור זה\", חזור ולחץ שוב עדכון" else null
+            if (note != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    note, style = MaterialTheme.typography.bodyMedium,
+                    color = if (vm.updateError != null) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
     }

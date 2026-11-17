@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,3 +41,13 @@ jobs:
         with:
           name: transcriber-apk
           path: app/build/outputs/apk/release/*.apk
+
+      # The app checks the latest release on launch and offers a one-tap update
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/main' && env.KEYSTORE_FILE != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: 1.0.${{ github.run_number }}
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk transcriber.apk
+          gh release create "v$VERSION" transcriber.apk --title "$VERSION" --notes "Build $VERSION"

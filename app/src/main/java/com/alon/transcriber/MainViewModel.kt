@@ -2,7 +2,10 @@ package com.alon.transcriber
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
@@ -39,6 +42,37 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clear() = items.clear()
+
+    /* ---------- self-update ---------- */
+
+    var update by mutableStateOf<Updater.Release?>(null)
+        private set
+    var updating by mutableStateOf(false)
+        private set
+    var updateError by mutableStateOf<String?>(null)
+        private set
+
+    init {
+        viewModelScope.launch { update = Updater.check(getApplication()) }
+    }
+
+    /** Returns false if the install permission must be granted first. */
+    fun installUpdate(): Boolean {
+        val release = update ?: return true
+        if (!Updater.canInstall(getApplication())) return false
+        updating = true
+        updateError = null
+        viewModelScope.launch {
+            try {
+                Updater.downloadAndInstall(getApplication(), release)
+            } catch (e: Exception) {
+                updateError = (e as? TranscribeException)?.message ?: "העדכון נכשל, נסה שוב"
+            } finally {
+                updating = false
+            }
+        }
+        return true
+    }
 
     private fun run(item: Item) {
         viewModelScope.launch {
