@@ -1,10 +1,13 @@
 package com.alon.transcriber
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -58,14 +61,30 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 
+/** Multi-file picker that opens straight in WhatsApp's voice-notes folder. */
+class PickVoiceNotes : ActivityResultContracts.OpenMultipleDocuments() {
+    override fun createIntent(context: Context, input: Array<String>): Intent =
+        super.createIntent(context, input).putExtra(
+            DocumentsContract.EXTRA_INITIAL_URI,
+            DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents",
+                "primary:Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Voice Notes"
+            )
+        )
+}
+
+// .opus files are reported under different MIME types depending on the device
+private val AUDIO_TYPES = arrayOf("audio/*", "application/ogg", "application/octet-stream")
+
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels()
+    private val picker = registerForActivityResult(PickVoiceNotes()) { uris -> vm.submit(uris) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleIntent(intent)
-        setContent { AppTheme { AppScreen(vm) } }
+        setContent { AppTheme { AppScreen(vm, onPick = { picker.launch(AUDIO_TYPES) }) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -154,7 +173,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppScreen(vm: MainViewModel) {
+fun AppScreen(vm: MainViewModel, onPick: () -> Unit) {
     var apiKey by remember { mutableStateOf(vm.prefs.apiKey) }
     var showSettings by remember { mutableStateOf(apiKey.isBlank()) }
     val snackbar = remember { SnackbarHostState() }
@@ -172,6 +191,9 @@ fun AppScreen(vm: MainViewModel) {
                 },
                 actions = {
                     if (vm.items.isNotEmpty() && !showSettings) {
+                        IconButton(onClick = onPick) {
+                            Icon(Icons.Outlined.LibraryMusic, contentDescription = "הוספה מתיקיית ההודעות הקוליות")
+                        }
                         IconButton(onClick = { vm.clear() }) {
                             Icon(Icons.Outlined.DeleteSweep, contentDescription = "ניקוי")
                         }
@@ -202,7 +224,7 @@ fun AppScreen(vm: MainViewModel) {
                         // Retry anything that failed, e.g. because the key was missing or wrong
                         vm.items.filter { it.state is ItemState.Failed }.forEach { vm.retry(it.id) }
                     }
-                    vm.items.isEmpty() -> IdleScreen()
+                    vm.items.isEmpty() -> IdleScreen(onPick)
                     else -> ResultsList(vm, snackbar)
                 }
             }
@@ -314,7 +336,7 @@ fun SettingsScreen(prefs: Prefs, onSaved: (String) -> Unit) {
 }
 
 @Composable
-fun IdleScreen() {
+fun IdleScreen(onPick: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -334,6 +356,23 @@ fun IdleScreen() {
                 Step(2, "תפריט ⋮ ואז שיתוף")
                 Step(3, "בוחרים באפליקציה \"מתמלל\"")
             }
+        }
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "או כמה הודעות בבת אחת:",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(
+            onClick = onPick,
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth().height(56.dp)
+        ) {
+            Icon(Icons.Outlined.LibraryMusic, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("בחירה מתיקיית ההודעות הקוליות", fontSize = 16.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -495,6 +534,7 @@ fun ResultsList(vm: MainViewModel, snackbar: SnackbarHostState) {
                                         )
                                     }
                                     val meta = listOfNotNull(
+                                        item.label,
                                         s.result.durationSec?.let { "הודעה קולית · ${formatDuration(it)}" },
                                         languageName(s.result.language)
                                     )

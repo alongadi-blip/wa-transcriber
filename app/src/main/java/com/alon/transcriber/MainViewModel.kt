@@ -2,6 +2,7 @@ package com.alon.transcriber
 
 import android.app.Application
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -16,7 +17,10 @@ sealed interface ItemState {
     data class Failed(val message: String) : ItemState
 }
 
-data class Item(val id: Long, val uri: Uri, val state: ItemState)
+/** label: date parsed from a WhatsApp file name, e.g. PTT-20261117-WA0003.opus → 17.11.2026 */
+data class Item(val id: Long, val uri: Uri, val state: ItemState, val label: String? = null)
+
+private val PTT_DATE = Regex("""(\d{4})(\d{2})(\d{2})-WA\d+""")
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     val prefs = Prefs(app)
@@ -27,8 +31,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (uris.isEmpty()) return
         // Append rather than replace: WhatsApp can only share one voice note at a time,
         // so the user collects several by sharing them one after another.
-        uris.forEach { uri ->
-            val item = Item(nextId++, uri, ItemState.Loading)
+        // WhatsApp file names embed date + sequence, so sorting by name = chronological order.
+        val named = uris.map { it to displayName(it) }.sortedBy { it.second ?: "" }
+        named.forEach { (uri, name) ->
+            val label = name?.let { PTT_DATE.find(it) }?.destructured
+                ?.let { (y, m, d) -> "$d.$m.$y" }
+            val item = Item(nextId++, uri, ItemState.Loading, label)
             items.add(item)
             run(item)
         }
@@ -43,6 +51,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun clear() = items.clear()
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        getApplication<Application>().contentResolver
+            .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull()
 
     /* ---------- self-update ---------- */
 
