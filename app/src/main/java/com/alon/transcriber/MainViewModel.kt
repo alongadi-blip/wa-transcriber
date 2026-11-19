@@ -92,11 +92,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun run(item: Item) {
         viewModelScope.launch {
             val result = try {
-                val key = prefs.apiKey
-                if (key.isBlank()) ItemState.Failed("צריך להגדיר מפתח API של Groq")
-                else ItemState.Done(
-                    GroqClient.transcribe(getApplication(), item.uri, key, prefs.language)
-                )
+                ItemState.Done(Transcriber.transcribe(getApplication(), item.uri, prefs))
             } catch (e: TranscribeException) {
                 ItemState.Failed(e.message ?: "שגיאה לא ידועה")
             } catch (e: Exception) {

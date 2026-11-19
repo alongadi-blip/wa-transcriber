@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -174,7 +176,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen(vm: MainViewModel, onPick: () -> Unit) {
-    var apiKey by remember { mutableStateOf(vm.prefs.apiKey) }
+    var apiKey by remember { mutableStateOf(vm.prefs.activeKey) }
     var showSettings by remember { mutableStateOf(apiKey.isBlank()) }
     val snackbar = remember { SnackbarHostState() }
 
@@ -280,25 +282,40 @@ fun UpdateBanner(vm: MainViewModel) {
 
 @Composable
 fun SettingsScreen(prefs: Prefs, onSaved: (String) -> Unit) {
-    var key by remember { mutableStateOf(prefs.apiKey) }
+    var engine by remember { mutableStateOf(prefs.engine) }
+    var geminiKey by remember { mutableStateOf(prefs.geminiKey) }
+    var groqKey by remember { mutableStateOf(prefs.groqKey) }
     var lang by remember { mutableStateOf(prefs.language) }
     var visible by remember { mutableStateOf(false) }
     val uri = LocalUriHandler.current
+    val isGemini = engine == Prefs.ENGINE_GEMINI
+    val key = if (isGemini) geminiKey else groqKey
 
     Column(
-        Modifier.fillMaxSize().imePadding().padding(horizontal = 20.dp, vertical = 8.dp),
+        Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("הגדרות", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+
+        Text("מנוע תמלול", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = isGemini, onClick = { engine = Prefs.ENGINE_GEMINI },
+                label = { Text("Gemini (מומלץ)") })
+            FilterChip(selected = !isGemini, onClick = { engine = Prefs.ENGINE_GROQ },
+                label = { Text("Groq") })
+        }
         Text(
-            "התמלול מתבצע ב-Groq (חינמי). צריך מפתח API פעם אחת.",
-            style = MaterialTheme.typography.bodyLarge,
+            if (isGemini) "של גוגל, חינמי. צריך מפתח מ-Google AI Studio פעם אחת."
+            else "Whisper דרך Groq, חינמי ומהיר, פחות מדויק בעברית.",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         OutlinedTextField(
-            value = key, onValueChange = { key = it.trim() },
-            label = { Text("מפתח Groq API") },
-            placeholder = { Text("gsk_...") },
+            value = key,
+            onValueChange = { if (isGemini) geminiKey = it.trim() else groqKey = it.trim() },
+            label = { Text(if (isGemini) "מפתח Gemini API" else "מפתח Groq API") },
+            placeholder = { Text(if (isGemini) "AIza..." else "gsk_...") },
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -312,10 +329,12 @@ fun SettingsScreen(prefs: Prefs, onSaved: (String) -> Unit) {
             },
             modifier = Modifier.fillMaxWidth()
         )
-        TextButton(onClick = { uri.openUri("https://console.groq.com/keys") }) {
+        TextButton(onClick = {
+            uri.openUri(if (isGemini) "https://aistudio.google.com/apikey" else "https://console.groq.com/keys")
+        }) {
             Icon(Icons.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("קבלת מפתח באתר Groq")
+            Text(if (isGemini) "קבלת מפתח ב-Google AI Studio" else "קבלת מפתח באתר Groq")
         }
 
         Text("שפת ההודעות", style = MaterialTheme.typography.titleMedium)
@@ -324,9 +343,13 @@ fun SettingsScreen(prefs: Prefs, onSaved: (String) -> Unit) {
             FilterChip(selected = lang == "", onClick = { lang = "" }, label = { Text("זיהוי אוטומטי") })
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(8.dp))
         Button(
-            onClick = { prefs.apiKey = key; prefs.language = lang; onSaved(key) },
+            onClick = {
+                prefs.geminiKey = geminiKey; prefs.groqKey = groqKey
+                prefs.engine = engine; prefs.language = lang
+                onSaved(key)
+            },
             enabled = key.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(18.dp)
